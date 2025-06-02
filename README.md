@@ -13,7 +13,7 @@ O Tralhobot é um protótipo de bot conversacional em Python, usando o Microsoft
 
 ## Como Rodar
 
-1.  **Requisitos:** Python 3.7+, Git, Visual Studio Code, Bot Framework Emulator.
+1.  **Requisitos:** Python 3.7+, Git, Qualquer terminal de sua escolha (Utilizei Visual Studio Code e sublime text), Bot Framework Emulator.
 2.  **Preparação:**
     * Navegue até a pasta `Codigo` do projeto.
     * Crie e ative um ambiente virtual (`python -m venv .venv` e `.venv\Scripts\activate.bat`).
