@@ -33,4 +33,4 @@ O Tralhobot é um protótipo de bot conversacional em Python, usando o Microsoft
 
 ## Versionamento
 
-O projeto segue o Versionamento Semântico (`MAJOR.MINOR.PATCH`). A versão atual do protótipo é **`v1.0.0`**. Novas funcionalidades serão desenvolvidas em branches separadas (ex: `feature/nlp-integration`) antes de serem mescladas na branch `main`.
+A versão atual do protótipo é a**`v1.0.0`**. Novas funcionalidades serão desenvolvidas em branches separadas (ex: `feature/nlp-integration`) antes de serem mescladas na branch `main`.
