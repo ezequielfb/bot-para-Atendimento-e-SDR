@@ -2,7 +2,7 @@
 
 ## Visão Geral
 
-O Tralhobot é um protótipo de bot conversacional em Python, usando o Microsoft Bot Framework. Ele atua como um assistente de atendimento (FAQ) e qualifica leads para o time de SDR da Tralhotec.
+O Tralhobot é um protótipo de bot conversacional em Python, usando o Microsoft Bot Framework. Ele atua como um assistente de atendimento (FAQ) e qualifica leads para o time de SDR de uma empresa (Tralhotec como exemplo).
 
 ## Arquivos Principais
 
