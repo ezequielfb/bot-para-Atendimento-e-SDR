@@ -1,3 +1,8 @@
-flask
-botbuilder-core
+Flask
+gunicorn
 aiohttp
+botbuilder-core
+botbuilder-schema
+asyncio # Se não for parte do botbuilder-core, adicione
+# E quaisquer outras bibliotecas que seu projeto use (ex: requests, numpy, etc.)
+
