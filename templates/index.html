@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tralhobot Web</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      background: #f4f4f4;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    #chatbox {
+      flex-grow: 1;
+      padding: 20px;
+      overflow-y: auto;
+      background: white;
+      border-bottom: 1px solid #ccc;
+    }
+    .msg {
+      margin-bottom: 10px;
+    }
+    .user { color: blue; }
+    .bot { color: green; }
+    #form {
+      display: flex;
+      padding: 10px;
+      background: #eee;
+    }
+    input[type="text"] {
+      flex: 1;
+      padding: 10px;
+      font-size: 16px;
+    }
+    button {
+      padding: 10px;
+      background: #4CAF50;
+      color: white;
+      border: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="chatbox"></div>
+  <form id="form">
+    <input type="text" id="input" placeholder="Digite sua mensagem..." autocomplete="off" />
+    <button type="submit">Enviar</button>
+  </form>
+
+  <script>
+    const chatbox = document.getElementById("chatbox");
+    const form = document.getElementById("form");
+    const input = document.getElementById("input");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const text = input.value.trim();
+      if (!text) return;
+
+      addMessage("Você", text, "user");
+      input.value = "";
+
+      const activity = {
+        type: "message",
+        from: { id: "user", name: "User" },
+        text: text
+      };
+
+      const response = await fetch("/api/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(activity)
+      });
+
+      if (response.ok) {
+        addMessage("Tralhobot", "(resposta processada no backend)", "bot");
+      } else {
+        addMessage("Erro", "Falha ao enviar mensagem.", "bot");
+      }
+    });
+
+    function addMessage(sender, text, className) {
+      const msg = document.createElement("div");
+      msg.className = `msg ${className}`;
+      msg.innerHTML = `<strong>${sender}:</strong> ${text}`;
+      chatbox.appendChild(msg);
+      chatbox.scrollTop = chatbox.scrollHeight;
+    }
+  </script>
+</body>
+</html>
