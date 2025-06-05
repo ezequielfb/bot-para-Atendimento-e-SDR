@@ -30,7 +30,7 @@ O Tralhobot é um protótipo de bot conversacional em Python, usando o Microsoft
 
 ## Como Testar
 
-O Tralhobot pode ser testado de duas formas:
+O bot pode ser testado de duas formas:
 
 1.  **Testando Localmente (com `ngrok` e Bot Framework Emulator):**
     * Com seu bot rodando localmente (passo 3 acima), abra um **novo terminal**.
@@ -44,7 +44,3 @@ O Tralhobot pode ser testado de duas formas:
     * O bot está implantado e disponível em: `https://bot-sdr.onrender.com/`
     * Para interagir com ele, você precisa enviar requisições **POST** para o endpoint: `https://bot-sdr.onrender.com/api/messages`.
     * Você pode usar o **Bot Framework Emulator** (conectando com a URL do Render e fornecendo o `MicrosoftAppId` e o `MicrosoftAppPassword` reais que você obteve do Azure) ou ferramentas como Postman/Insomnia/cURL.
-
-## Versionamento
-
-A versão atual do protótipo é a **`v1.0.0`**. Novas funcionalidades serão desenvolvidas em branches separadas (ex: `feature/nlp-integration`) antes de serem mescladas na branch `main`.
