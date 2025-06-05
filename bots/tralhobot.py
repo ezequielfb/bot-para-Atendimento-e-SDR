@@ -18,13 +18,15 @@ from email_utils import send_log_to_stakeholders
 # Importações do Azure AI Language
 from azure.ai.language.conversations import ConversationAnalysisClient
 from azure.core.credentials import AzureKeyCredential
-# IMPORTAÇÕES ADICIONADAS/REVISADAS PARA CLU MODELS
-from azure.ai.language.conversations.models import ( 
-    # ConversationAnalysisOptions, # Removido, pois ConversationalTask é mais direto
-    ConversationItem,            # Usado para o item da conversa de entrada
-    ConversationalTask,          # Usado para a tarefa de análise conversacional
-    ConversationAnalysisResult   # Mantido para type hint se possível, se não, use Any
-)
+
+# REMOVIDAS AS IMPORTAÇÕES DE 'models' OU '_models' para evitar o ModuleNotFoundError
+# As classes ConversationItem e ConversationalTask serão criadas diretamente
+# no código, e ConversationAnalysisResult será tipado como Any.
+# from azure.ai.language.conversations.models import ( 
+#     ConversationItem,            
+#     ConversationalTask,          
+#     ConversationAnalysisResult   
+# )
 
 
 CONFIG = DefaultConfig()
@@ -40,7 +42,7 @@ FAQ_DATA = {
 
 SUPPORT_SUGGESTIONS = {
     "acesso": "Verifique se está usando as credenciais corretas ou tente redefinir sua senha. Mais detalhes aqui: [link_redefinir_senha]",
-    "não consigo": "Poderia detalhar um pouco mais o que você não está conseguindo fazer? Qual sistema ou funcionalidade?",
+    "não consigo": "Poderia detalhar um pouco mais o que você não está conseguindo fazendo? Qual sistema ou funcionalidade?",
     "problema": "Para problemas gerais, reiniciar o aplicativo ou o computador pode ajudar. Se persistir, por favor, me dê mais detalhes."
 }
 
@@ -113,28 +115,36 @@ class Tralhobot(ActivityHandler):
 
         if not handled and self.clu_client and self.clu_project_name and self.clu_deployment_name:
             try:
-                # CORREÇÃO AQUI: Criando os objetos ConversationItem e ConversationalTask
-                conversation_item = ConversationItem(
-                    participant_id=turn_context.activity.from_property.id, # Usar ID do usuário
-                    id=turn_context.activity.id, # Usar ID da atividade
-                    text=user_message_original
-                )
+                # Agora, instanciamos os objetos diretamente, sem importação explícita do submódulo 'models'
+                # Isso depende do ConversationAnalysisClient já ter acesso a essas classes.
+                # Se ainda der erro, precisaremos usar dicionários brutos e confiar no SDK.
+                
+                # Definir ConversationItem e ConversationalTask como dicionários brutos
+                # É uma forma alternativa que o SDK geralmente aceita para evitar problemas de importação de classes.
+                conversation_item_dict = {
+                    "participantId": turn_context.activity.from_property.id,
+                    "id": turn_context.activity.id,
+                    "text": user_message_original
+                }
 
-                conversational_task = ConversationalTask(
-                    analysis_input={"conversationItem": conversation_item},
-                    parameters={
+                conversational_task_dict = {
+                    "kind": "Conversation",
+                    "analysisInput": {
+                        "conversationItem": conversation_item_dict
+                    },
+                    "parameters": {
                         "projectName": self.clu_project_name,
                         "deploymentName": self.clu_deployment_name,
-                        "verbose": True, # Para ver mais detalhes, incluindo entidades
+                        "verbose": True,
                     }
+                }
+                
+                # A chamada analyze_conversation agora espera o dicionário raw da tarefa
+                # O type hint 'Any' é usado aqui porque não importamos ConversationAnalysisResult
+                response: Any = await self.clu_client.analyze_conversation(
+                    conversational_task_dict
                 )
                 
-                # A chamada analyze_conversation agora espera o objeto ConversationalTask
-                response: Any = await self.clu_client.analyze_conversation(
-                    conversational_task
-                )
-                # FIM DA CORREÇÃO
-
                 if response and response.result and response.result.prediction:
                     top_intent = response.result.prediction.top_intent
                     confidence_score = 0.0
