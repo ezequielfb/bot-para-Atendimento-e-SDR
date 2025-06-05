@@ -18,9 +18,14 @@ from email_utils import send_log_to_stakeholders
 # Importações do Azure AI Language
 from azure.ai.language.conversations import ConversationAnalysisClient
 from azure.core.credentials import AzureKeyCredential
+# IMPORTAÇÕES ADICIONADAS/REVISADAS PARA CLU MODELS
+from azure.ai.language.conversations.models import ( 
+    # ConversationAnalysisOptions, # Removido, pois ConversationalTask é mais direto
+    ConversationItem,            # Usado para o item da conversa de entrada
+    ConversationalTask,          # Usado para a tarefa de análise conversacional
+    ConversationAnalysisResult   # Mantido para type hint se possível, se não, use Any
+)
 
-# REMOVIDA A LINHA ABAIXO QUE CAUSAVA O ERRO DE IMPORTAÇÃO
-# from azure.ai.language.conversations._models import ConversationAnalysisResult 
 
 CONFIG = DefaultConfig()
 
@@ -108,24 +113,27 @@ class Tralhobot(ActivityHandler):
 
         if not handled and self.clu_client and self.clu_project_name and self.clu_deployment_name:
             try:
-                # O type hint 'Any' é usado aqui para evitar o erro de importação
-                response: Any = await self.clu_client.analyze_conversation(
-                    task={
-                        "kind": "Conversation",
-                        "analysisInput": {
-                            "conversationItem": {
-                                "participantId": turn_context.activity.from_property.id,
-                                "id": turn_context.activity.id,
-                                "text": user_message_original
-                            }
-                        },
-                        "parameters": {
-                            "projectName": self.clu_project_name,
-                            "deploymentName": self.clu_deployment_name,
-                            "verbose": True,
-                        }
+                # CORREÇÃO AQUI: Criando os objetos ConversationItem e ConversationalTask
+                conversation_item = ConversationItem(
+                    participant_id=turn_context.activity.from_property.id, # Usar ID do usuário
+                    id=turn_context.activity.id, # Usar ID da atividade
+                    text=user_message_original
+                )
+
+                conversational_task = ConversationalTask(
+                    analysis_input={"conversationItem": conversation_item},
+                    parameters={
+                        "projectName": self.clu_project_name,
+                        "deploymentName": self.clu_deployment_name,
+                        "verbose": True, # Para ver mais detalhes, incluindo entidades
                     }
                 )
+                
+                # A chamada analyze_conversation agora espera o objeto ConversationalTask
+                response: Any = await self.clu_client.analyze_conversation(
+                    conversational_task
+                )
+                # FIM DA CORREÇÃO
 
                 if response and response.result and response.result.prediction:
                     top_intent = response.result.prediction.top_intent
