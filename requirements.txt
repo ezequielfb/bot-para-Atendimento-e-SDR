@@ -4,3 +4,4 @@ aiohttp
 botbuilder-core
 botbuilder-schema
 asyncio
+azure-ai-language-conversations

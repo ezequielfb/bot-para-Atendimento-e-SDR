@@ -13,3 +13,10 @@ class DefaultConfig:
     EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD", "sua_senha_de_app_ou_email") # Senha do seu e-mail (ou senha de app se usar Gmail/Outlook com 2FA)
     EMAIL_SMTP_SERVER = os.environ.get("EMAIL_SMTP_SERVER", "smtp.gmail.com") # Ex: smtp.gmail.com (Gmail), smtp.office365.com (Outlook)
     EMAIL_SMTP_PORT = int(os.environ.get("EMAIL_SMTP_PORT", 587)) # Porta: 587 (TLS) ou 465 (SSL)
+
+    # Configurações para o Azure Ai Language (CLU)
+
+    CLU_ENDPOINT = os.environ.get("CLU_ENDPOINT", "")  # Endpoint da API
+    CLU_API_KEY = os.environ.get("CLU_API_KEY", "")  # Chave de API
+    CLU_PROJECT_NAME = os.environ.get("CLU_PROJECT_NAME", "")  # Nome do projeto CLU
+    CLU_DEPLOYMENT_NAME = os.environ.get("CLU_DEPLOYMENT_NAME", "")  # Nome do deployment CLU
