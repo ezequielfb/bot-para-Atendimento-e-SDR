@@ -3,6 +3,8 @@ from botbuilder.core import BotFrameworkAdapter, BotFrameworkAdapterSettings, Tu
 from botbuilder.schema import Activity
 from bots.tralhobot import Tralhobot
 from config import DefaultConfig
+from azure.ai.language.conversations import ConversationAnalysisClient
+from azure.core.credentials import AzureKeyCredential
 import asyncio
 import traceback # Adicionado para traceback
 
@@ -86,4 +88,3 @@ def messages():
 #     # Ele automaticamente se liga a 0.0.0.0 e à variável de ambiente PORT
 #     print("Iniciando servidor de desenvolvimento Flask...")
 #     app.run(host="0.0.0.0", port=3979, debug=True)
-

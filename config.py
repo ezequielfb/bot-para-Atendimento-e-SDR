@@ -16,7 +16,7 @@ class DefaultConfig:
 
     # Configurações para o Azure Ai Language (CLU)
 
-    CLU_ENDPOINT = os.environ.get("CLU_ENDPOINT", "")  # Endpoint da API
-    CLU_API_KEY = os.environ.get("CLU_API_KEY", "")  # Chave de API
-    CLU_PROJECT_NAME = os.environ.get("CLU_PROJECT_NAME", "")  # Nome do projeto CLU
-    CLU_DEPLOYMENT_NAME = os.environ.get("CLU_DEPLOYMENT_NAME", "")  # Nome do deployment CLU
+    CLU_ENDPOINT = os.environ.get("CLU_ENDPOINT", "https://sdr-language-ai.cognitiveservices.azure.com/")  # Endpoint da API
+    CLU_API_KEY = os.environ.get("CLU_API_KEY", "9fH7Dt5goNSnlWTbfR4dq8Fm9yZP4IOvJC1boq5zSdoFY0I76XdhJQQJ99BFACYeBjFXJ3w3AAAaACOG26ju")  # Chave de API
+    CLU_PROJECT_NAME = os.environ.get("CLU_PROJECT_NAME", "Tralhobot_CLU")  # Nome do projeto CLU
+    CLU_DEPLOYMENT_NAME = os.environ.get("CLU_DEPLOYMENT_NAME", "production-deployment")  # Nome do deployment CLU
