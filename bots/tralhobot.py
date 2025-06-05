@@ -4,7 +4,7 @@
 import sys
 import traceback
 from datetime import datetime
-from typing import Any # ADICIONADO PARA O TYPE HINT 'ANY'
+from typing import Any # Mantido, caso precise, mas agora usamos tipos mais específicos
 
 from botbuilder.core import (
     ActivityHandler, TurnContext, MessageFactory, UserState, 
@@ -18,15 +18,13 @@ from email_utils import send_log_to_stakeholders
 # Importações do Azure AI Language
 from azure.ai.language.conversations import ConversationAnalysisClient
 from azure.core.credentials import AzureKeyCredential
-
-# REMOVIDAS AS IMPORTAÇÕES DE 'models' OU '_models' para evitar o ModuleNotFoundError
-# As classes ConversationItem e ConversationalTask serão criadas diretamente
-# no código, e ConversationAnalysisResult será tipado como Any.
-# from azure.ai.language.conversations.models import ( 
-#     ConversationItem,            
-#     ConversationalTask,          
-#     ConversationAnalysisResult   
-# )
+# AGORA REVERTEMOS PARA A IMPORTAÇÃO PADRÃO DE 'models'
+# Esperamos que o downgrade da biblioteca resolva o ModuleNotFoundError
+from azure.ai.language.conversations import ( 
+    ConversationItem,            # Usado para o item da conversa de entrada
+    ConversationalTask,          # Usado para a tarefa de análise conversacional
+    ConversationAnalysisResult   # Para o type hint e acesso a resultados
+)
 
 
 CONFIG = DefaultConfig()
@@ -42,7 +40,7 @@ FAQ_DATA = {
 
 SUPPORT_SUGGESTIONS = {
     "acesso": "Verifique se está usando as credenciais corretas ou tente redefinir sua senha. Mais detalhes aqui: [link_redefinir_senha]",
-    "não consigo": "Poderia detalhar um pouco mais o que você não está conseguindo fazendo? Qual sistema ou funcionalidade?",
+    "não consigo": "Poderia detalhar um pouco mais o que você não está conseguindo fazer? Qual sistema ou funcionalidade?",
     "problema": "Para problemas gerais, reiniciar o aplicativo ou o computador pode ajudar. Se persistir, por favor, me dê mais detalhes."
 }
 
@@ -115,34 +113,25 @@ class Tralhobot(ActivityHandler):
 
         if not handled and self.clu_client and self.clu_project_name and self.clu_deployment_name:
             try:
-                # Agora, instanciamos os objetos diretamente, sem importação explícita do submódulo 'models'
-                # Isso depende do ConversationAnalysisClient já ter acesso a essas classes.
-                # Se ainda der erro, precisaremos usar dicionários brutos e confiar no SDK.
-                
-                # Definir ConversationItem e ConversationalTask como dicionários brutos
-                # É uma forma alternativa que o SDK geralmente aceita para evitar problemas de importação de classes.
-                conversation_item_dict = {
-                    "participantId": turn_context.activity.from_property.id,
-                    "id": turn_context.activity.id,
-                    "text": user_message_original
-                }
+                # AGORA USAMOS OS OBJETOS DO SDK, COMO ELE ESPERA
+                conversation_item_obj = ConversationItem(
+                    participant_id=turn_context.activity.from_property.id,
+                    id=turn_context.activity.id,
+                    text=user_message_original
+                )
 
-                conversational_task_dict = {
-                    "kind": "Conversation",
-                    "analysisInput": {
-                        "conversationItem": conversation_item_dict
-                    },
-                    "parameters": {
+                conversational_task_obj = ConversationalTask(
+                    analysis_input={"conversationItem": conversation_item_obj}, # Passar o objeto
+                    parameters={
                         "projectName": self.clu_project_name,
                         "deploymentName": self.clu_deployment_name,
                         "verbose": True,
                     }
-                }
+                )
                 
-                # A chamada analyze_conversation agora espera o dicionário raw da tarefa
-                # O type hint 'Any' é usado aqui porque não importamos ConversationAnalysisResult
-                response: Any = await self.clu_client.analyze_conversation(
-                    conversational_task_dict
+                # A chamada analyze_conversation agora espera o OBJETO ConversationalTask
+                response: ConversationAnalysisResult = await self.clu_client.analyze_conversation(
+                    conversational_task_obj # Passar o objeto
                 )
                 
                 if response and response.result and response.result.prediction:
