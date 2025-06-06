@@ -4,4 +4,4 @@ aiohttp
 botbuilder-core
 botbuilder-schema
 asyncio
-azure-ai-language-conversations
+azure-ai-language-conversations==1.0.0
