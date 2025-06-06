@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tralhobot - Chat</title>
+    <link rel="stylesheet" href="https://cdn.botframework.com/botframework-webchat/latest/webchat.css">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f0f2f5; /* Um cinza claro e suave */
+        }
+        #webchat {
+            width: 90%;
+            max-width: 500px; /* Limita a largura em telas maiores */
+            height: 80vh; /* Altura responsiva */
+            border-radius: 12px;
+            overflow: hidden; /* Garante que os cantos arredondados funcionem */
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1); /* Sombra sutil */
+            display: flex;
+            flex-direction: column;
+            background-color: white;
+        }
+        @media (max-width: 768px) {
+            #webchat {
+                width: 95%;
+                height: 90vh; /* Mais altura em dispositivos móveis */
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="webchat" role="main"></div>
+
+    <script src="https://cdn.botframework.com/botframework-webchat/latest/webchat.js"></script>
+    <script>
+        // SUAS CREDENCIAIS - JÁ PREENCHIDAS
+        const DIRECT_LINE_SECRET_KEY = '11s5unVnUfCnMdRP218z3bpW3f6ZuHWUGCYJ8P6puoFxdl58IL0cJQQJ99BFAC4f1cMAArohAAABAZBS3byX.7If6pGdh9Ivlixi1xLrri1Wxt9TrX2zmIws17kJjClYOFajZmiPbJQQJ99BFAC4f1cMAArohAAABAZBS3tZB';
+        const BOT_APP_ID = '32d530bd-bae8-4a92-90ae-6377911c78ae';
+
+        // URL do endpoint de mensagens do seu bot no Render
+        // CONFIRME SE ESTA URL É A CORRETA PARA O SEU SERVIÇO NO RENDER.
+        const BOT_ENDPOINT_URL = 'https://bot-sdr.onrender.com/api/messages'; 
+
+        (async function () {
+            try {
+                // Obter um token Direct Line usando sua chave secreta
+                const res = await fetch('https://directline.botframework.com/v3/directline/tokens/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${DIRECT_LINE_SECRET_KEY}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        // Você pode adicionar um ID de usuário aqui se quiser, ex: 'userId': 'user123'
+                    })
+                });
+
+                if (!res.ok) {
+                    const errorText = await res.text();
+                    console.error('Erro ao obter token Direct Line:', res.status, errorText);
+                    alert('Erro ao conectar ao bot. Por favor, verifique as credenciais do Direct Line e tente novamente. Detalhes no console.');
+                    return;
+                }
+
+                const { token } = await res.json();
+
+                // Renderizar o Web Chat
+                window.WebChat.renderWebChat(
+                    {
+                        directLine: window.WebChat.createDirectLine({
+                            token,
+                            // O Direct Line Service URL é opcional se você estiver usando um token gerado
+                            // Mas se você precisar de um Direct Line token de um proxy, pode ser necessário.
+                            // directLineServiceUrl: 'YOUR_DIRECT_LINE_SERVICE_URL' 
+                        }),
+                        styleOptions: {
+                            hideUploadButton: true, // Esconde o botão de anexo se não for usado
+                            backgroundColor: '#F8F8F8', // Cor de fundo da área de chat
+                            bubbleBackground: '#E0E0E0', // Cor do balão de fala do bot
+                            bubbleFromUserBackground: '#4CAF50', // Cor do balão de fala do usuário (verde)
+                            bubbleFromUserTextColor: 'white', // Cor do texto do usuário
+                            accent: '#2196F3', // Cor de destaque (ex: borda de input, ícones)
+                            botAvatarImage: 'https://placehold.co/40x40/000000/FFFFFF?text=TB', // Imagem do avatar do bot
+                            userAvatarImage: 'https://placehold.co/40x40/FF5722/FFFFFF?text=VC', // Imagem do avatar do usuário
+                            hideSendBox: false, // Mostra/esconde a caixa de digitação
+                            sendBoxBackground: '#FFFFFF', // Cor de fundo da caixa de texto
+                            sendButtonBackground: '#2196F3', // Cor do botão de enviar
+                            sendButtonColor: 'white',
+                            focusOutlineColor: '#2196F3', // Cor do outline ao focar
+                            transcriptActivityAnimationDuration: 100, // Duração da animação ao exibir atividades
+                        },
+                        // Se você quiser customizar ainda mais, pode usar:
+                        // store: ...
+                        // locale: 'pt-BR'
+                        // userID: 'seu_id_de_usuario_opcional'
+                    },
+                    document.getElementById('webchat')
+                );
+
+                console.log('Web Chat carregado com sucesso.');
+
+            } catch (error) {
+                console.error('Erro ao iniciar o Web Chat:', error);
+                alert('Não foi possível carregar o chat. Verifique o console para mais detalhes.');
+            }
+        })();
+    </script>
+</body>
+</html>
