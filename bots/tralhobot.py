@@ -18,16 +18,10 @@ from email_utils import send_log_to_stakeholders
 # Importações do Azure AI Language
 from azure.ai.language.conversations import ConversationAnalysisClient
 from azure.core.credentials import AzureKeyCredential
-# **RE-ADICIONADO**: Mantenha as importações de modelos se o SDK v1.0.0 esperar
-# que você os use para construir a requisição ou interpretar a resposta
-# Se você tiver problemas com ModuleNotFoundError, PODEMOS PRECISAR AJUSTAR ISSO.
-# Por enquanto, vamos supor que a SDK precisa deles para o comportamento esperado do analyze_conversation
-# (Embora o erro atual seja TypeError, não ModuleNotFoundError)
-# from azure.ai.language.conversations.models import (
-#     AnalyzeConversationOptions,
-#     TextConversationItem,
-#     ConversationAnalysisResult, # Isso pode ser necessário para a tipagem correta
-# )
+# REMOVIDAS AS IMPORTAÇÕES DE 'models' OU '_models' para evitar o ModuleNotFoundError anterior,
+# como você havia feito inicialmente. Vamos manter a abordagem de tratar a resposta como um dict.
+# Se o TypeError persistir, a investigação precisará ser mais profunda sobre a versão da biblioteca
+# e como ela se comporta sem os modelos importados.
 
 CONFIG = DefaultConfig()
 
@@ -112,12 +106,12 @@ class Tralhobot(ActivityHandler):
 
         if current_support_state != "none":
             print(f"ON_MESSAGE_ACTIVITY: Entrando em fluxo de suporte.")
-            response_text = await self._handle_support_flow(turn_context, support_state_info) # Passe o dicionário de estado
+            response_text = await self._handle_support_flow(turn_context, support_state_info)
             response_activity = MessageFactory.text(response_text)
             handled = True
         elif current_sdr_state != "none":
             print(f"ON_MESSAGE_ACTIVITY: Entrando em fluxo SDR.")
-            response_activity = await self._handle_sdr_flow(turn_context, sdr_state_info) # Passe o dicionário de estado
+            response_activity = await self._handle_sdr_flow(turn_context, sdr_state_info)
             handled = True
 
         if not handled and self.clu_client and self.clu_project_name and self.clu_deployment_name:
@@ -141,18 +135,32 @@ class Tralhobot(ActivityHandler):
                     }
                 }
 
-                # === ALTERAÇÃO CRÍTICA AQUI ===
-                # A chamada para analyze_conversation é assíncrona e retorna um objeto
-                # (geralmente ConversationAnalysisResult para v1.0.0).
-                # Você precisa acessá-lo e então extrair a predição.
+                # === ALTERAÇÃO AQUI: TRATAMENTO MAIS ROBUSTO DO RETORNO DO CLU ===
+                # Mantemos o 'await' porque o método analyze_conversation é assíncrono.
+                # O problema anterior era sobre o tipo do objeto retornado.
+                clu_raw_response = await self.clu_client.analyze_conversation(task_payload)
                 
-                conversation_response = await self.clu_client.analyze_conversation(task_payload)
-
-                # O objeto `conversation_response` tem uma propriedade `prediction`
-                # que contém os detalhes da intenção e entidades.
-                # Use .as_dict() para converter o objeto prediction em um dicionário Python.
-                if conversation_response and hasattr(conversation_response, 'prediction'):
-                    prediction = conversation_response.prediction.as_dict()
+                prediction = {} # Inicializa como dicionário vazio para fallback
+                
+                # A documentação da v1.0.0 indica que o retorno é um objeto com um atributo 'prediction'.
+                if hasattr(clu_raw_response, 'prediction') and clu_raw_response.prediction is not None:
+                    # Se 'prediction' é um objeto, tentamos converter para dict
+                    if hasattr(clu_raw_response.prediction, 'as_dict'):
+                        prediction = clu_raw_response.prediction.as_dict()
+                        print(f"ON_MESSAGE_ACTIVITY: Resposta CLU processada (via .prediction.as_dict()): {prediction}")
+                    else: # Se não tiver .as_dict(), mas é um objeto que pode ser usado como dict
+                        prediction = dict(clu_raw_response.prediction) # Converte diretamente, se possível
+                        print(f"ON_MESSAGE_ACTIVITY: Resposta CLU processada (via dict()): {prediction}")
+                # Adiciona um fallback caso o retorno seja, inesperadamente, um dicionário direto sem 'prediction'
+                elif isinstance(clu_raw_response, dict) and 'result' in clu_raw_response:
+                    prediction = clu_raw_response.get('result', {}).get('prediction', {})
+                    print(f"ON_MESSAGE_ACTIVITY: Resposta CLU processada (como dicionário direto): {prediction}")
+                else:
+                    print(f"ON_MESSAGE_ACTIVITY: Tipo de resposta CLU inesperado ou vazio: {type(clu_raw_response)}")
+                
+                # --- O RESTANTE DO SEU CÓDIGO DO CLU CONTINUA AQUI ---
+                # Garante que 'prediction' é um dicionário antes de tentar acessá-lo.
+                if prediction:
                     top_intent = prediction.get("topIntent")
                     confidence_score = 0.0
 
@@ -191,7 +199,7 @@ class Tralhobot(ActivityHandler):
                     response_activity = MessageFactory.text(response_text)
                     handled = True
                 else:
-                    print("ON_MESSAGE_ACTIVITY: Resposta CLU inesperada ou incompleta.")
+                    print("ON_MESSAGE_ACTIVITY: Nenhuma predição CLU válida encontrada ou erro no parsing da resposta.")
 
             except Exception as e:
                 print(f"ON_MESSAGE_ACTIVITY: ERRO ao chamar o CLU: {e}")
@@ -307,7 +315,8 @@ class Tralhobot(ActivityHandler):
                 state["state"] = "awaiting_email_for_schedule"
                 response = MessageFactory.text("Excelente! Para qual e-mail posso enviar o convite da reunião?")
             else:
-                response = MessageFactory.text("Entendido. Se mudar de ideia ou precisar de algo mais, é só chamar!") # FECHEI O PARENTESES AQUI
+                # Corrigido o SyntaxError: '(' was never closed
+                response = MessageFactory.text("Entendido. Se mudar de ideia ou precisar de algo mais, é só chamar!")
                 state["state"] = "none"
             await self.sdr_state_accessor.set(turn_context, state)
             return response
@@ -316,7 +325,7 @@ class Tralhobot(ActivityHandler):
             state["email"] = turn_context.activity.text
             response = MessageFactory.text(f"Perfeito! Agendamento confirmado. O convite foi enviado para {state.get('email')}. "
                                         f"Há mais algo em que posso ajudar agora?")
-            send_log = True
+            # send_log = True # Variável send_log não utilizada
             state["state"] = "none"
             await self.sdr_state_accessor.set(turn_context, state)
             return response
@@ -334,7 +343,7 @@ class Tralhobot(ActivityHandler):
         elif current_state == "awaiting_email_for_materials":
             state["email"] = turn_context.activity.text
             response = MessageFactory.text(f"Materiais enviados para {state.get('email')}. Agradeço seu tempo e interesse na Tralhotec. Tenha um ótimo dia!")
-            send_log = True
+            # send_log = True # Variável send_log não utilizada
             state["state"] = "none"
             await self.sdr_state_accessor.set(turn_context, state)
             return response
