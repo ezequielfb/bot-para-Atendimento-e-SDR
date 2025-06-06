@@ -135,28 +135,23 @@ class Tralhobot(ActivityHandler):
                     }
                 }
 
-                # === ALTERAÇÃO AQUI: TRATAMENTO MAIS ROBUSTO DO RETORNO DO CLU ===
-                # Mantemos o 'await' porque o método analyze_conversation é assíncrono.
-                # O problema anterior era sobre o tipo do objeto retornado.
-                clu_raw_response = await self.clu_client.analyze_conversation(task_payload)
-                
+                # === ALTERAÇÃO CRÍTICA AQUI: REMOVENDO O 'await' ===
+                # Se o erro "object dict can't be used in 'await' expression" persiste
+                # na linha com 'await', a conclusão é que analyze_conversation NÃO
+                # retorna uma corrotina, mas sim um dicionário puro diretamente.
+                clu_raw_response = self.clu_client.analyze_conversation(task_payload) # REMOVIDO O 'await'
+
                 prediction = {} # Inicializa como dicionário vazio para fallback
-                
-                # A documentação da v1.0.0 indica que o retorno é um objeto com um atributo 'prediction'.
-                if hasattr(clu_raw_response, 'prediction') and clu_raw_response.prediction is not None:
-                    # Se 'prediction' é um objeto, tentamos converter para dict
-                    if hasattr(clu_raw_response.prediction, 'as_dict'):
-                        prediction = clu_raw_response.prediction.as_dict()
-                        print(f"ON_MESSAGE_ACTIVITY: Resposta CLU processada (via .prediction.as_dict()): {prediction}")
-                    else: # Se não tiver .as_dict(), mas é um objeto que pode ser usado como dict
-                        prediction = dict(clu_raw_response.prediction) # Converte diretamente, se possível
-                        print(f"ON_MESSAGE_ACTIVITY: Resposta CLU processada (via dict()): {prediction}")
-                # Adiciona um fallback caso o retorno seja, inesperadamente, um dicionário direto sem 'prediction'
-                elif isinstance(clu_raw_response, dict) and 'result' in clu_raw_response:
+
+                # Agora, tratamos clu_raw_response como um dicionário.
+                # A estrutura esperada é que 'result' contenha 'prediction'.
+                if isinstance(clu_raw_response, dict) and 'result' in clu_raw_response:
                     prediction = clu_raw_response.get('result', {}).get('prediction', {})
                     print(f"ON_MESSAGE_ACTIVITY: Resposta CLU processada (como dicionário direto): {prediction}")
                 else:
-                    print(f"ON_MESSAGE_ACTIVITY: Tipo de resposta CLU inesperado ou vazio: {type(clu_raw_response)}")
+                    # Isso aqui pode ajudar a depurar o que realmente está sendo retornado
+                    print(f"ON_MESSAGE_ACTIVITY: Tipo de resposta CLU inesperado ou vazio: {type(clu_raw_response)} - Conteúdo: {clu_raw_response}")
+                    prediction = {} # Fallback para um dicionário vazio
                 
                 # --- O RESTANTE DO SEU CÓDIGO DO CLU CONTINUA AQUI ---
                 # Garante que 'prediction' é um dicionário antes de tentar acessá-lo.
@@ -195,14 +190,14 @@ class Tralhobot(ActivityHandler):
                         response_text = default_response_text
                     else:
                         response_text = default_response_text
-
+                    
                     response_activity = MessageFactory.text(response_text)
                     handled = True
                 else:
                     print("ON_MESSAGE_ACTIVITY: Nenhuma predição CLU válida encontrada ou erro no parsing da resposta.")
 
             except Exception as e:
-                print(f"ON_MESSAGE_ACTIVITY: ERRO ao chamar o CLU: {e}")
+                print(f"ON_MESSAGE_ACTIVITY: ERRO ao chamar o CLU (após tentativa de ajuste): {e}")
                 traceback.print_exc(file=sys.stdout)
 
         if not handled:
@@ -315,7 +310,6 @@ class Tralhobot(ActivityHandler):
                 state["state"] = "awaiting_email_for_schedule"
                 response = MessageFactory.text("Excelente! Para qual e-mail posso enviar o convite da reunião?")
             else:
-                # Corrigido o SyntaxError: '(' was never closed
                 response = MessageFactory.text("Entendido. Se mudar de ideia ou precisar de algo mais, é só chamar!")
                 state["state"] = "none"
             await self.sdr_state_accessor.set(turn_context, state)
@@ -325,7 +319,6 @@ class Tralhobot(ActivityHandler):
             state["email"] = turn_context.activity.text
             response = MessageFactory.text(f"Perfeito! Agendamento confirmado. O convite foi enviado para {state.get('email')}. "
                                         f"Há mais algo em que posso ajudar agora?")
-            # send_log = True # Variável send_log não utilizada
             state["state"] = "none"
             await self.sdr_state_accessor.set(turn_context, state)
             return response
@@ -343,7 +336,6 @@ class Tralhobot(ActivityHandler):
         elif current_state == "awaiting_email_for_materials":
             state["email"] = turn_context.activity.text
             response = MessageFactory.text(f"Materiais enviados para {state.get('email')}. Agradeço seu tempo e interesse na Tralhotec. Tenha um ótimo dia!")
-            # send_log = True # Variável send_log não utilizada
             state["state"] = "none"
             await self.sdr_state_accessor.set(turn_context, state)
             return response
