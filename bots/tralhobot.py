@@ -4,10 +4,10 @@
 import sys
 import traceback
 from datetime import datetime
-from typing import Any # Mantido, caso precise, mas agora usamos tipos mais específicos
+from typing import Any, Dict
 
 from botbuilder.core import (
-    ActivityHandler, TurnContext, MessageFactory, UserState, 
+    ActivityHandler, TurnContext, MessageFactory, UserState,
     ConversationState, CardFactory
 )
 from botbuilder.schema import ChannelAccount, ActivityTypes, Attachment, ActionTypes, CardAction
@@ -18,14 +18,10 @@ from email_utils import send_log_to_stakeholders
 # Importações do Azure AI Language
 from azure.ai.language.conversations import ConversationAnalysisClient
 from azure.core.credentials import AzureKeyCredential
-# IMPORTAÇÕES ESSENCIAIS DE 'models' REATIVADAS
-# Essas classes são necessárias para a chamada analyze_conversation
-from azure.ai.language.conversations.models import ( 
-    ConversationItem,            # Usado para o item da conversa de entrada
-    ConversationalTask,          # Usado para a tarefa de análise conversacional
-    ConversationAnalysisResult   # Para o type hint e acesso a resultados
-)
-
+# REMOVIDAS AS IMPORTAÇÕES DE 'models' OU '_models' para evitar o ModuleNotFoundError anterior,
+# como você havia feito inicialmente. Vamos manter a abordagem de tratar a resposta como um dict.
+# Se o TypeError persistir, a investigação precisará ser mais profunda sobre a versão da biblioteca
+# e como ela se comporta sem os modelos importados.
 
 CONFIG = DefaultConfig()
 
@@ -54,12 +50,12 @@ class Tralhobot(ActivityHandler):
             )
         if user_state is None:
             raise TypeError("[DialogBot]: Missing parameter. user_state is required")
-            
+
         self.conversation_state = conversation_state
         self.user_state = user_state
         self.support_state_accessor = self.conversation_state.create_property("SupportState")
         self.sdr_state_accessor = self.conversation_state.create_property("SDRState")
-        self.log_accessor = self.conversation_state.create_property("ConversationLog") 
+        self.log_accessor = self.conversation_state.create_property("ConversationLog")
 
         self.clu_client = clu_client
         self.clu_project_name = clu_project_name
@@ -74,7 +70,7 @@ class Tralhobot(ActivityHandler):
             await self.log_accessor.set(turn_context, log)
 
         await super().on_turn(turn_context)
-        
+
         await self.conversation_state.save_changes(turn_context, False)
         await self.user_state.save_changes(turn_context, False)
 
@@ -110,50 +106,71 @@ class Tralhobot(ActivityHandler):
 
         if current_support_state != "none":
             print(f"ON_MESSAGE_ACTIVITY: Entrando em fluxo de suporte.")
-            response_text = await self._handle_support_flow(turn_context, user_message_lower, support_state_info)
+            response_text = await self._handle_support_flow(turn_context, support_state_info)
             response_activity = MessageFactory.text(response_text)
             handled = True
         elif current_sdr_state != "none":
             print(f"ON_MESSAGE_ACTIVITY: Entrando em fluxo SDR.")
-            response_activity = await self._handle_sdr_flow(turn_context, user_message_original, sdr_state_info)
+            response_activity = await self._handle_sdr_flow(turn_context, sdr_state_info)
             handled = True
 
         if not handled and self.clu_client and self.clu_project_name and self.clu_deployment_name:
             print(f"ON_MESSAGE_ACTIVITY: CLU ativado. Chamando analyze_conversation.")
             try:
-                conversation_item_obj = ConversationItem(
-                    participant_id=turn_context.activity.from_property.id,
-                    id=turn_context.activity.id,
-                    text=user_message_original,
-                    modality="text", 
-                    language="pt-br"
-                )
-
-                conversational_task_obj = ConversationalTask(
-                    analysis_input={"conversationItem": conversation_item_obj}, # Passar o objeto
-                    parameters={
+                task_payload: Dict[str, Any] = {
+                    "kind": "Conversation",
+                    "analysisInput": {
+                        "conversationItem": {
+                            "participantId": turn_context.activity.from_property.id,
+                            "id": turn_context.activity.id,
+                            "text": user_message_original,
+                            "modality": "text",
+                            "language": "pt-br"
+                        }
+                    },
+                    "parameters": {
                         "projectName": self.clu_project_name,
                         "deploymentName": self.clu_deployment_name,
-                        "verbose": True, # Para ver mais detalhes, incluindo entidades
+                        "verbose": True,
                     }
-                )
+                }
+
+                # === ALTERAÇÃO CRÍTICA AQUI: REMOVENDO O 'await' ===
+                # Se o erro "object dict can't be used in 'await' expression" persiste
+                # na linha com 'await', a conclusão é que analyze_conversation NÃO
+                # retorna uma corrotina, mas sim um dicionário puro diretamente.
+                clu_raw_response = self.clu_client.analyze_conversation(task_payload) # REMOVIDO O 'await'
+
+                prediction = {} # Inicializa como dicionário vazio para fallback
+
+                # Agora, tratamos clu_raw_response como um dicionário.
+                # A estrutura esperada é que 'result' contenha 'prediction'.
+                if isinstance(clu_raw_response, dict) and 'result' in clu_raw_response:
+                    prediction = clu_raw_response.get('result', {}).get('prediction', {})
+                    print(f"ON_MESSAGE_ACTIVITY: Resposta CLU processada (como dicionário direto): {prediction}")
+                else:
+                    # Isso aqui pode ajudar a depurar o que realmente está sendo retornado
+                    print(f"ON_MESSAGE_ACTIVITY: Tipo de resposta CLU inesperado ou vazio: {type(clu_raw_response)} - Conteúdo: {clu_raw_response}")
+                    prediction = {} # Fallback para um dicionário vazio
                 
-                response: ConversationAnalysisResult = await self.clu_client.analyze_conversation(
-                    conversational_task_obj # Passar o objeto
-                )
-                
-                print(f"ON_MESSAGE_ACTIVITY: Resposta CLU bruta: {response}") # Printando o objeto response CLU
-                if response and response.result and response.result.prediction:
-                    top_intent = response.result.prediction.top_intent
+                # --- O RESTANTE DO SEU CÓDIGO DO CLU CONTINUA AQUI ---
+                # Garante que 'prediction' é um dicionário antes de tentar acessá-lo.
+                if prediction:
+                    top_intent = prediction.get("topIntent")
                     confidence_score = 0.0
-                    if response.result.prediction.intents:
-                         confidence_score = response.result.prediction.intents[0].confidence
-                    
-                    entities = response.result.prediction.entities if response.result.prediction.entities else []
-                    
+
+                    if "intents" in prediction and top_intent:
+                        # Acessando a confiança da intenção principal
+                        for intent_info in prediction["intents"]:
+                            if intent_info.get("category") == top_intent:
+                                confidence_score = intent_info.get("confidenceScore", 0.0)
+                                break
+
+                    entities = prediction.get("entities", [])
+
                     print(f"CLU: Intenção detectada: '{top_intent}' com confiança: {confidence_score:.2f}")
                     if entities:
-                        print(f"CLU: Entidades detectadas: {[e.as_dict() for e in entities] if hasattr(entities[0], 'as_dict') else entities}")
+                        print(f"CLU: Entidades detectadas: {entities}")
 
                     if top_intent == "Saudacao":
                         response_text = "Olá! Como posso ajudar você hoje?"
@@ -172,17 +189,17 @@ class Tralhobot(ActivityHandler):
                     elif top_intent == "None":
                         response_text = default_response_text
                     else:
-                        response_text = default_response_text 
+                        response_text = default_response_text
                     
                     response_activity = MessageFactory.text(response_text)
                     handled = True
                 else:
-                    print("ON_MESSAGE_ACTIVITY: Resposta CLU inesperada ou incompleta.")
+                    print("ON_MESSAGE_ACTIVITY: Nenhuma predição CLU válida encontrada ou erro no parsing da resposta.")
 
             except Exception as e:
-                print(f"ON_MESSAGE_ACTIVITY: ERRO ao chamar o CLU: {e}")
+                print(f"ON_MESSAGE_ACTIVITY: ERRO ao chamar o CLU (após tentativa de ajuste): {e}")
                 traceback.print_exc(file=sys.stdout)
-        
+
         if not handled:
             print("ON_MESSAGE_ACTIVITY: Entrando em fluxo de fallback (FAQ/padrão).")
             for keyword, answer in FAQ_DATA.items():
@@ -192,10 +209,10 @@ class Tralhobot(ActivityHandler):
                     response_activity = MessageFactory.text(response_text)
                     handled = True
                     break
-            
+
             if not handled:
                 response_activity = MessageFactory.text(default_response_text)
-        
+
         await turn_context.send_activity(response_activity)
         print(f"ON_MESSAGE_ACTIVITY: Bot respondeu com: {response_activity.text or response_activity.attachments}")
         log = await self.log_accessor.get(turn_context, lambda: "")
@@ -209,7 +226,7 @@ class Tralhobot(ActivityHandler):
 
 
     async def _handle_support_flow(self, turn_context: TurnContext, state: Dict) -> str:
-        current_state = state.get("state", "none") 
+        current_state = state.get("state", "none")
         response = "Ocorreu um erro no fluxo de suporte."
         print(f"HANDLE_SUPPORT_FLOW: Estado atual: '{current_state}', Mensagem: '{turn_context.activity.text}'")
 
@@ -264,29 +281,29 @@ class Tralhobot(ActivityHandler):
         elif current_state == "awaiting_size":
             state["size"] = turn_context.activity.text
             is_qualified = False
-            
+
             size_lower = turn_context.activity.text.lower()
             if "10" in size_lower or "50" in size_lower or "grande" in size_lower:
                 is_qualified = True
-            
+
             state["qualified"] = is_qualified
-            
+
             if is_qualified:
-                state["state"] = "proposing_meeting" # Ajustado para o próximo estado correto
+                state["state"] = "proposing_meeting"
                 response_activity = self._create_yes_no_card(
                     "Com base no que conversamos, acredito que nossas soluções podem realmente agregar valor à sua empresa. "
                     "Gostaria de agendar uma conversa com um de nossos especialistas? Ele(a) poderá apresentar demonstrações personalizadas e discutir como podemos atender às suas necessidades específicas.",
                     "schedule_meeting_yes", "schedule_meeting_no"
                 )
             else:
-                state["state"] = "handling_unqualified" # Ajustado para o próximo estado correto
+                state["state"] = "handling_unqualified"
                 response_activity = self._create_yes_no_card(
                     "Obrigado pelas informações. No momento, parece que nossas soluções podem não ser o encaixe ideal para as suas necessidades atuais / perfil da sua empresa. "
                     "Gostaria de receber alguns materiais informativos sobre [Tópico Relevante] por e-mail para referência futura? (Sim/Não)",
                     "send_materials_yes", "send_materials_no"
                 )
-            await self.sdr_state_accessor.set(turn_context, state) # Salva o estado
-            return response_activity # Retorna a activity
+            await self.sdr_state_accessor.set(turn_context, state)
+            return response_activity
 
         elif current_state == "proposing_meeting":
             if turn_context.activity.text.lower() == "schedule_meeting_yes":
@@ -296,16 +313,15 @@ class Tralhobot(ActivityHandler):
                 response = MessageFactory.text("Entendido. Se mudar de ideia ou precisar de algo mais, é só chamar!")
                 state["state"] = "none"
             await self.sdr_state_accessor.set(turn_context, state)
-            return response # Retorna a activity
+            return response
 
         elif current_state == "awaiting_email_for_schedule":
             state["email"] = turn_context.activity.text
             response = MessageFactory.text(f"Perfeito! Agendamento confirmado. O convite foi enviado para {state.get('email')}. "
                                         f"Há mais algo em que posso ajudar agora?")
-            send_log = True
-            state["state"] = "none" # Reset SDR state after confirmation
+            state["state"] = "none"
             await self.sdr_state_accessor.set(turn_context, state)
-            return response # Retorna a activity
+            return response
 
         elif current_state == "handling_unqualified":
             if turn_context.activity.text.lower() == "send_materials_yes":
@@ -315,24 +331,21 @@ class Tralhobot(ActivityHandler):
                 response = MessageFactory.text("Entendido. Agradeço seu tempo e interesse na Tralhotec. Tenha um ótimo dia!")
                 state["state"] = "none"
             await self.sdr_state_accessor.set(turn_context, state)
-            return response # Retorna a activity
-        
+            return response
+
         elif current_state == "awaiting_email_for_materials":
             state["email"] = turn_context.activity.text
             response = MessageFactory.text(f"Materiais enviados para {state.get('email')}. Agradeço seu tempo e interesse na Tralhotec. Tenha um ótimo dia!")
-            send_log = True
-            state["state"] = "none" # Reset SDR state after sending materials
+            state["state"] = "none"
             await self.sdr_state_accessor.set(turn_context, state)
-            return response # Retorna a activity
+            return response
 
 
     def _create_yes_no_card(self, text: str, yes_value: str, no_value: str) -> Attachment:
-        # Note: CardFactory methods create Activities, we need the attachment part
-        card = CardFactory.hero_card(
-            text=text, # Use text for main content in HeroCard
+        return CardFactory.hero_card(
+            text=text,
             buttons=[
                 CardAction(title="Sim", type=ActionTypes.im_back, value=yes_value),
                 CardAction(title="Não", type=ActionTypes.im_back, value=no_value),
             ],
-        )
-        return card.attachments[0] # Retorna apenas o attachment
+        ).attachments[0]
