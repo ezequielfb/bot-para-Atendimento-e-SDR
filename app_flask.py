@@ -5,6 +5,7 @@ from bots.tralhobot import Tralhobot
 from config import DefaultConfig
 import asyncio
 import traceback
+import os # Garante que 'os' está importado
 
 from azure.ai.language.conversations import ConversationAnalysisClient
 from azure.core.credentials import AzureKeyCredential
@@ -12,20 +13,45 @@ from azure.core.credentials import AzureKeyCredential
 app = Flask(__name__)
 
 CONFIG = DefaultConfig()
+
 SETTINGS = BotFrameworkAdapterSettings(CONFIG.APP_ID, CONFIG.APP_PASSWORD)
-ADAPTER = BotFrameworkAdapter(SETTINGS)
+
+# === CORREÇÃO AQUI: CLASSE ADAPTER CUSTOMIZADA PARA RESOLVER 'os' NÃO DEFINIDO ===
+class CustomBotFrameworkAdapter(BotFrameworkAdapter):
+    def __init__(self, settings: BotFrameworkAdapterSettings):
+        super().__init__(settings)
+        # O RENDER_HOSTNAME agora é inicializado dentro do construtor
+        # onde 'os' está no escopo correto.
+        self._prod_service_url = "https://" + (os.environ.get("RENDER_EXTERNAL_HOSTNAME") or "")
+        if not os.environ.get("RENDER_EXTERNAL_HOSTNAME"):
+             print("AVISO: Variável de ambiente RENDER_EXTERNAL_HOSTNAME não encontrada. Pode afetar respostas em produção.")
+        print(f"ADAPTER: _prod_service_url inicializado como: {self._prod_service_url}")
+
+    async def get_service_url(self, turn_context: TurnContext) -> str:
+        service_url = turn_context.activity.service_url
+
+        if self._prod_service_url and ("localhost" in service_url or not service_url):
+            print(f"ADAPTER: serviceUrl '{service_url}' da atividade substituído por '{self._prod_service_url}'")
+            return self._prod_service_url
+        
+        print(f"ADAPTER: Usando serviceUrl da atividade: '{service_url}'")
+        return service_url
+
+# Inicialize o adaptador customizado
+ADAPTER = CustomBotFrameworkAdapter(SETTINGS) # Não precisa passar prod_service_url aqui, pois é inicializado internamente
+# === FIM DA CORREÇÃO AQUI ===
+
+
 MEMORY = MemoryStorage()
 CONVERSATION_STATE = ConversationState(MEMORY)
 USER_STATE = UserState(MEMORY)
 
 # --- INICIALIZAÇÃO DO CLIENTE CLU ---
 CLU_CLIENT = None
-# === LINHA CORRIGIDA 1 ===
 if CONFIG.CLU_ENDPOINT and CONFIG.CLU_API_KEY:
     try:
         CLU_CLIENT = ConversationAnalysisClient(
             endpoint=CONFIG.CLU_ENDPOINT,
-            # === LINHA CORRIGIDA 2 ===
             credential=AzureKeyCredential(CONFIG.CLU_API_KEY)
         )
         print("CLU Client inicializado com sucesso.")
