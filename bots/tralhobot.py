@@ -149,10 +149,14 @@ class Tralhobot(ActivityHandler):
                         
                         if "intents" in prediction and top_intent:
                             # Acessando a confiança da intenção principal
+                            # O formato da resposta para intenções pode variar. 
+                            # Se for uma lista de objetos, use:
                             for intent_info in prediction["intents"]:
                                 if intent_info.get("category") == top_intent:
                                     confidence_score = intent_info.get("confidenceScore", 0.0)
                                     break
+                            # Se for um dicionário mapeado por nome (menos comum agora), use:
+                            # confidence_score = prediction["intents"][top_intent].get("confidenceScore", 0.0)
                         
                         entities = prediction.get("entities", [])
 
@@ -298,7 +302,7 @@ class Tralhobot(ActivityHandler):
                 state["state"] = "awaiting_email_for_schedule"
                 response = MessageFactory.text("Excelente! Para qual e-mail posso enviar o convite da reunião?")
             else:
-                response = MessageFactory.text("Entendido. Se mudar de ideia ou precisar de algo mais, é só chamar!")
+                response = MessageFactory.text("Entendido. Se mudar de ideia ou precisar de algo mais, é só chamar!"
                 state["state"] = "none"
             await self.sdr_state_accessor.set(turn_context, state)
             return response # Retorna a activity
@@ -324,7 +328,7 @@ class Tralhobot(ActivityHandler):
         
         elif current_state == "awaiting_email_for_materials":
             state["email"] = turn_context.activity.text
-            response = MessageFactory.text(f"Materiais enviados para {state.get('email')}. Agradeço seu tempo e interesse na Tralhotec. Tenha um ótimo dia!")
+            response = MessageFactory.text(f"Materiais enviados para {state.get('email')}. Agradeço seu tempo e interesse na Tralhotec. Tenha um ótimo dia!" )
             send_log = True
             state["state"] = "none" # Reset SDR state after sending materials
             await self.sdr_state_accessor.set(turn_context, state)
