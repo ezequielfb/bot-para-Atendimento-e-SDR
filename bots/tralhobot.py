@@ -298,7 +298,7 @@ class Tralhobot(ActivityHandler):
                 state["state"] = "awaiting_email_for_schedule"
                 response = MessageFactory.text("Excelente! Para qual e-mail posso enviar o convite da reunião?")
             else:
-                response = MessageFactory.text("Entendido. Se mudar de ideia ou precisar de algo mais, é só chamar!"
+                response = MessageFactory.text("Entendido. Se mudar de ideia ou precisar de algo mais, é só chamar!")
                 state["state"] = "none"
             await self.sdr_state_accessor.set(turn_context, state)
             return response # Retorna a activity
