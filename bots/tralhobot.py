@@ -18,8 +18,9 @@ from email_utils import send_log_to_stakeholders
 # Importações do Azure AI Language
 from azure.ai.language.conversations import ConversationAnalysisClient
 from azure.core.credentials import AzureKeyCredential
-# REMOVIDAS TODAS AS IMPORTAÇÕES DE 'models' OU '_models'
-# Usaremos dicionários para a entrada do CLU e para acessar a saída.
+# REMOVIDAS TODAS AS IMPORTAÇÕES DE 'models' OU '_models' para evitar o ModuleNotFoundError
+# As classes ConversationItem e ConversationalTask serão criadas como dicionários.
+# A classe ConversationAnalysisResult não será importada, e o retorno será tratado como um dicionário.
 
 
 CONFIG = DefaultConfig()
@@ -129,7 +130,6 @@ class Tralhobot(ActivityHandler):
                 }
                 
                 # A chamada analyze_conversation agora espera um dicionário
-                # Usamos Any para o type hint pois não importamos ConversationAnalysisResult
                 response_dict: Dict[str, Any] = await self.clu_client.analyze_conversation(
                     task_payload
                 )
@@ -150,6 +150,8 @@ class Tralhobot(ActivityHandler):
                                 if intent_info.get("category") == top_intent:
                                     confidence_score = intent_info.get("confidenceScore", 0.0)
                                     break
+                            # Se for um dicionário mapeado por nome (menos comum agora), use:
+                            # confidence_score = prediction["intents"][top_intent].get("confidenceScore", 0.0)
                         
                         entities = prediction.get("entities", [])
 
