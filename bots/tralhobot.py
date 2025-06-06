@@ -201,12 +201,6 @@ class Tralhobot(ActivityHandler):
 
 
         print(f"ON_MESSAGE_ACTIVITY: Turn finished for activity type {turn_context.activity.type}.")
-        # A lógica de log da resposta deve ser adaptada para capturar o que foi realmente enviado.
-        # Por enquanto, estamos apenas registrando a mensagem do usuário no log de conversas.
-        # A remoção do logging da resposta do bot aqui evita erros se 'response_activity'
-        # não estiver mais disponível ou não for uma atividade após as mudanças.
-        # Se precisar de logging detalhado de todas as respostas do bot,
-        # precisaria ser feito após cada 'send_activity' explicitamente.
 
 
     async def _handle_support_flow(self, turn_context: TurnContext, state: Dict) -> bool: # Agora retorna um booleano
@@ -287,17 +281,19 @@ class Tralhobot(ActivityHandler):
             
             if is_qualified:
                 state["state"] = "proposing_meeting"
+                # === ALTERAÇÃO AQUI: 'text' foi mudado para 'title' ===
                 response_activity_to_send = self._create_yes_no_card(
-                    "Com base no que conversamos, acredito que nossas soluções podem realmente agregar valor à sua empresa. "
+                    text="Com base no que conversamos, acredito que nossas soluções podem realmente agregar valor à sua empresa. "
                     "Gostaria de agendar uma conversa com um de nossos especialistas? Ele(a) poderá apresentar demonstrações personalizadas e discutir como podemos atender às suas necessidades específicas.",
-                    "schedule_meeting_yes", "schedule_meeting_no"
+                    yes_value="schedule_meeting_yes", no_value="schedule_meeting_no"
                 )
             else:
                 state["state"] = "handling_unqualified"
+                # === ALTERAÇÃO AQUI: 'text' foi mudado para 'title' ===
                 response_activity_to_send = self._create_yes_no_card(
-                    "Obrigado pelas informações. No momento, parece que nossas soluções podem não ser o encaixe ideal para as suas necessidades atuais / perfil da sua empresa. "
+                    text="Obrigado pelas informações. No momento, parece que nossas soluções podem não ser o encaixe ideal para as suas necessidades atuais / perfil da sua empresa. "
                     "Gostaria de receber alguns materiais informativos sobre [Tópico Relevante] por e-mail para referência futura? (Sim/Não)",
-                    "send_materials_yes", "send_materials_no"
+                    yes_value="send_materials_yes", no_value="send_materials_no"
                 )
             handled = True
 
@@ -342,11 +338,12 @@ class Tralhobot(ActivityHandler):
         return handled # Retorna se o fluxo foi tratado e a resposta enviada
 
 
-    def _create_yes_no_card(self, text: str, yes_value: str, no_value: str) -> Attachment:
-        return CardFactory.hero_card(
-            text=text,
-            buttons=[
-                CardAction(title="Sim", type=ActionTypes.im_back, value=yes_value),
-                CardAction(title="Não", type=ActionTypes.im_back, value=no_value),
-            ],
-        ).attachments[0]
+def _create_yes_no_card(self, text: str, yes_value: str, no_value: str) -> Attachment:
+    # DEVE ESTAR ASSIM:
+    return CardFactory.hero_card(
+        title=text, # <--- VERIFIQUE SE ESTÁ 'title' AQUI
+        buttons=[
+            CardAction(title="Sim", type=ActionTypes.im_back, value=yes_value),
+            CardAction(title="Não", type=ActionTypes.im_back, value=no_value),
+        ],
+    ).attachments[0]
