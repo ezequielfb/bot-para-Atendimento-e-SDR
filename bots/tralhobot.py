@@ -4,7 +4,7 @@
 import sys
 import traceback
 from datetime import datetime
-from typing import Any # Mantido, caso precise, mas agora usamos tipos mais específicos
+from typing import Any, Dict # Importar Dict para tipagem de dicionários
 
 from botbuilder.core import (
     ActivityHandler, TurnContext, MessageFactory, UserState, 
@@ -18,13 +18,9 @@ from email_utils import send_log_to_stakeholders
 # Importações do Azure AI Language
 from azure.ai.language.conversations import ConversationAnalysisClient
 from azure.core.credentials import AzureKeyCredential
-# IMPORTAÇÕES ESSENCIAIS DE 'models' REATIVADAS
-# Essas classes são necessárias para a chamada analyze_conversation
-from azure.ai.language.conversations.models import ( 
-    ConversationItem,            # Usado para o item da conversa de entrada
-    ConversationalTask,          # Usado para a tarefa de análise conversacional
-    ConversationAnalysisResult   # Para o type hint e acesso a resultados
-)
+# REMOVIDAS TODAS AS IMPORTAÇÕES DE 'models' OU '_models'
+# As classes ConversationItem e ConversationalTask serão criadas como dicionários.
+# A classe ConversationAnalysisResult não será importada, e o retorno será tratado como um dicionário.
 
 
 CONFIG = DefaultConfig()
@@ -121,61 +117,70 @@ class Tralhobot(ActivityHandler):
         if not handled and self.clu_client and self.clu_project_name and self.clu_deployment_name:
             print(f"ON_MESSAGE_ACTIVITY: CLU ativado. Chamando analyze_conversation.")
             try:
-                conversation_item_obj = ConversationItem(
-                    participant_id=turn_context.activity.from_property.id,
-                    id=turn_context.activity.id,
-                    text=user_message_original,
-                    modality="text", 
-                    language="pt-br"
-                )
-
-                conversational_task_obj = ConversationalTask(
-                    analysis_input={"conversationItem": conversation_item_obj}, # Passar o objeto
-                    parameters={
+                task_payload: Dict[str, Any] = {
+                    "kind": "Conversation",
+                    "analysisInput": {
+                        "conversationItem": {
+                            "participantId": turn_context.activity.from_property.id, 
+                            "id": turn_context.activity.id, 
+                            "text": user_message_original,
+                            "modality": "text", 
+                            "language": "pt-br"
+                        }
+                    },
+                    "parameters": {
                         "projectName": self.clu_project_name,
                         "deploymentName": self.clu_deployment_name,
                         "verbose": True, # Para ver mais detalhes, incluindo entidades
                     }
+                }
+                
+                response_dict: Dict[str, Any] = await self.clu_client.analyze_conversation(
+                    task_payload
                 )
                 
-                response: ConversationAnalysisResult = await self.clu_client.analyze_conversation(
-                    conversational_task_obj # Passar o objeto
-                )
-                
-                print(f"ON_MESSAGE_ACTIVITY: Resposta CLU bruta: {response}") # Printando o objeto response CLU
-                if response and response.result and response.result.prediction:
-                    top_intent = response.result.prediction.top_intent
-                    confidence_score = 0.0
-                    if response.result.prediction.intents:
-                         confidence_score = response.result.prediction.intents[0].confidence
-                    
-                    entities = response.result.prediction.entities if response.result.prediction.entities else []
-                    
-                    print(f"CLU: Intenção detectada: '{top_intent}' com confiança: {confidence_score:.2f}")
-                    if entities:
-                        print(f"CLU: Entidades detectadas: {[e.as_dict() for e in entities] if hasattr(entities[0], 'as_dict') else entities}")
+                print(f"ON_MESSAGE_ACTIVITY: Resposta CLU bruta: {response_dict}") # Printando o dicionário CLU
+                if response_dict and "result" in response_dict:
+                    result = response_dict["result"]
+                    if "prediction" in result:
+                        prediction = result["prediction"]
+                        top_intent = prediction.get("topIntent")
+                        confidence_score = 0.0
+                        
+                        if "intents" in prediction and top_intent:
+                            # Acessando a confiança da intenção principal
+                            for intent_info in prediction["intents"]:
+                                if intent_info.get("category") == top_intent:
+                                    confidence_score = intent_info.get("confidenceScore", 0.0)
+                                    break
+                        
+                        entities = prediction.get("entities", [])
 
-                    if top_intent == "Saudacao":
-                        response_text = "Olá! Como posso ajudar você hoje?"
-                    elif top_intent == "PerguntarPreco":
-                        response_text = "Nossos preços variam de acordo com o serviço. Você gostaria de informações sobre algum plano específico?"
-                    elif top_intent == "SolicitarSuporte":
-                        response_text = "Entendo que você precisa de suporte. Para que eu possa ajudar melhor, poderia descrever o problema que está enfrentando?"
-                        await self.support_state_accessor.set(turn_context, {"state": "awaiting_problem_description"})
-                    elif top_intent == "QualificarSDR":
-                        sdr_state_info["state"] = "awaiting_name_role"
-                        await self.sdr_state_accessor.set(turn_context, sdr_state_info)
-                        response_text = ("Claro! Posso direcionar você para um de nossos especialistas. "
-                                        "Para começarmos, poderia me dizer seu nome completo e sua função/cargo atual na empresa, por favor?")
-                    elif top_intent == "Despedida":
-                        response_text = "Até logo! Foi um prazer ajudar. Tenha um ótimo dia!"
-                    elif top_intent == "None":
-                        response_text = default_response_text
-                    else:
-                        response_text = default_response_text 
-                    
-                    response_activity = MessageFactory.text(response_text)
-                    handled = True
+                        print(f"CLU: Intenção detectada: '{top_intent}' com confiança: {confidence_score:.2f}")
+                        if entities:
+                            print(f"CLU: Entidades detectadas: {entities}")
+
+                        if top_intent == "Saudacao":
+                            response_text = "Olá! Como posso ajudar você hoje?"
+                        elif top_intent == "PerguntarPreco":
+                            response_text = "Nossos preços variam de acordo com o serviço. Você gostaria de informações sobre algum plano específico?"
+                        elif top_intent == "SolicitarSuporte":
+                            response_text = "Entendo que você precisa de suporte. Para que eu possa ajudar melhor, poderia descrever o problema que está enfrentando?"
+                            await self.support_state_accessor.set(turn_context, {"state": "awaiting_problem_description"})
+                        elif top_intent == "QualificarSDR":
+                            sdr_state_info["state"] = "awaiting_name_role"
+                            await self.sdr_state_accessor.set(turn_context, sdr_state_info)
+                            response_text = ("Claro! Posso direcionar você para um de nossos especialistas. "
+                                            "Para começarmos, poderia me dizer seu nome completo e sua função/cargo atual na empresa, por favor?")
+                        elif top_intent == "Despedida":
+                            response_text = "Até logo! Foi um prazer ajudar. Tenha um ótimo dia!"
+                        elif top_intent == "None":
+                            response_text = default_response_text
+                        else:
+                            response_text = default_response_text 
+                        
+                        response_activity = MessageFactory.text(response_text)
+                        handled = True
                 else:
                     print("ON_MESSAGE_ACTIVITY: Resposta CLU inesperada ou incompleta.")
 
@@ -293,7 +298,7 @@ class Tralhobot(ActivityHandler):
                 state["state"] = "awaiting_email_for_schedule"
                 response = MessageFactory.text("Excelente! Para qual e-mail posso enviar o convite da reunião?")
             else:
-                response = MessageFactory.text("Entendido. Se mudar de ideia ou precisar de algo mais, é só chamar!")
+                response = MessageFactory.text("Entendido. Se mudar de ideia ou precisar de algo mais, é só chamar!"
                 state["state"] = "none"
             await self.sdr_state_accessor.set(turn_context, state)
             return response # Retorna a activity
@@ -327,12 +332,10 @@ class Tralhobot(ActivityHandler):
 
 
     def _create_yes_no_card(self, text: str, yes_value: str, no_value: str) -> Attachment:
-        # Note: CardFactory methods create Activities, we need the attachment part
-        card = CardFactory.hero_card(
-            text=text, # Use text for main content in HeroCard
+        return CardFactory.hero_card(
+            text=text,
             buttons=[
                 CardAction(title="Sim", type=ActionTypes.im_back, value=yes_value),
                 CardAction(title="Não", type=ActionTypes.im_back, value=no_value),
             ],
-        )
-        return card.attachments[0] # Retorna apenas o attachment
+        ).attachments[0]
