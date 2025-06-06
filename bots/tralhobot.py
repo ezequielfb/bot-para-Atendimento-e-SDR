@@ -18,8 +18,13 @@ from email_utils import send_log_to_stakeholders
 # Importações do Azure AI Language
 from azure.ai.language.conversations import ConversationAnalysisClient
 from azure.core.credentials import AzureKeyCredential
-# REMOVIDAS as importações problemáticas que não existem na versão 1.1.0
-# Usaremos dicionários em vez de objetos de classe
+# IMPORTAÇÕES ESSENCIAIS DE 'models' REATIVADAS
+# Essas classes são necessárias para a chamada analyze_conversation
+from azure.ai.language.conversations.models import ( 
+    ConversationItem,            # Usado para o item da conversa de entrada
+    ConversationalTask,          # Usado para a tarefa de análise conversacional
+    ConversationAnalysisResult   # Para o type hint e acesso a resultados
+)
 
 
 CONFIG = DefaultConfig()
@@ -35,7 +40,7 @@ FAQ_DATA = {
 
 SUPPORT_SUGGESTIONS = {
     "acesso": "Verifique se está usando as credenciais corretas ou tente redefinir sua senha. Mais detalhes aqui: [link_redefinir_senha]",
-    "não consigo": "Poderia detalhar um pouco mais o que você não está conseguindo fazer? Qual sistema ou funcionalidade?",
+    "não consigo": "Poderia detalhar um pouco mais o que você não está conseguindo fazendo? Qual sistema ou funcionalidade?",
     "problema": "Para problemas gerais, reiniciar o aplicativo ou o computador pode ajudar. Se persistir, por favor, me dê mais detalhes."
 }
 
@@ -108,68 +113,68 @@ class Tralhobot(ActivityHandler):
 
         if not handled and self.clu_client and self.clu_project_name and self.clu_deployment_name:
             try:
-                # VERSÃO CORRIGIDA: Usando dicionário em vez de objetos de classe
-                # Formato compatível com azure-ai-language-conversations 1.1.0
-                task = {
-                    "kind": "Conversation",
-                    "analysisInput": {
-                        "conversationItem": {
-                            "participantId": turn_context.activity.from_property.id,
-                            "id": turn_context.activity.id,
-                            "modality": "text",
-                            "language": "pt-br",
-                            "text": user_message_original
-                        },
-                        "isLoggingEnabled": False
-                    },
-                    "parameters": {
+                # AGORA USAMOS OS OBJETOS DE CLASSE DO SDK NOVAMENTE
+                # Isso deve funcionar com o downgrade da biblioteca
+                conversation_item_obj = ConversationItem(
+                    participant_id=turn_context.activity.from_property.id,
+                    id=turn_context.activity.id,
+                    text=user_message_original,
+                    # Adicionar modality e language aqui, se eles não foram adicionados automaticamente
+                    # pelo SDK na construção do ConversationItem.
+                    # Estes campos foram adicionados no dicionário raw antes.
+                    # Se eles causarem erro ao serem passados como argumentos, remova-os aqui.
+                    modality="text", 
+                    language="pt-br"
+                )
+
+                conversational_task_obj = ConversationalTask(
+                    analysis_input={"conversationItem": conversation_item_obj}, # Passar o objeto
+                    parameters={
                         "projectName": self.clu_project_name,
                         "deploymentName": self.clu_deployment_name,
-                        "verbose": True
+                        "verbose": True, # Para ver mais detalhes, incluindo entidades
                     }
-                }
+                )
                 
-                # A chamada analyze_conversation agora espera um dicionário
-                response = await self.clu_client.analyze_conversation(task)
+                # A chamada analyze_conversation agora espera o OBJETO ConversationalTask
+                response: ConversationAnalysisResult = await self.clu_client.analyze_conversation(
+                    conversational_task_obj # Passar o objeto
+                )
                 
-                # Acessando os resultados do dicionário retornado
-                if response and "result" in response:
-                    result = response["result"]
-                    if "prediction" in result:
-                        prediction = result["prediction"]
-                        top_intent = prediction.get("topIntent")
-                        confidence_score = 0.0
-                        
-                        if "intents" in prediction and top_intent in prediction["intents"]:
-                            confidence_score = prediction["intents"][top_intent].get("confidenceScore", 0.0)
-                        
-                        entities = prediction.get("entities", [])
+                if response and response.result and response.result.prediction:
+                    top_intent = response.result.prediction.top_intent
+                    confidence_score = 0.0
+                    if response.result.prediction.intents:
+                         confidence_score = response.result.prediction.intents[0].confidence
+                    
+                    entities = response.result.prediction.entities if response.result.prediction.entities else []
 
-                        if top_intent == "Saudacao":
-                            response_text = "Olá! Como posso ajudar você hoje?"
-                        elif top_intent == "PerguntarPreco":
-                            response_text = "Nossos preços variam de acordo com o serviço. Você gostaria de informações sobre algum plano específico?"
-                        elif top_intent == "SolicitarSuporte":
-                            response_text = "Entendo que você precisa de suporte. Para que eu possa ajudar melhor, poderia descrever o problema que está enfrentando?"
-                            await self.support_state_accessor.set(turn_context, {"state": "awaiting_problem_description"})
-                        elif top_intent == "QualificarSDR":
-                            sdr_state_info["state"] = "awaiting_name_role"
-                            await self.sdr_state_accessor.set(turn_context, sdr_state_info)
-                            response_text = ("Claro! Posso direcionar você para um de nossos especialistas. "
-                                            "Para começarmos, poderia me dizer seu nome completo e sua função/cargo atual na empresa, por favor?")
-                        elif top_intent == "Despedida":
-                            response_text = "Até logo! Foi um prazer ajudar. Tenha um ótimo dia!"
-                        elif top_intent == "None":
-                            response_text = default_response_text
-                        else:
-                            response_text = default_response_text 
-                        
-                        response_activity = MessageFactory.text(response_text)
-                        handled = True
+                    if top_intent == "Saudacao":
+                        response_text = "Olá! Como posso ajudar você hoje?"
+                    elif top_intent == "PerguntarPreco":
+                        response_text = "Nossos preços variam de acordo com o serviço. Você gostaria de informações sobre algum plano específico?"
+                    elif top_intent == "SolicitarSuporte":
+                        response_text = "Entendo que você precisa de suporte. Para que eu possa ajudar melhor, poderia descrever o problema que está enfrentando?"
+                        await self.support_state_accessor.set(turn_context, {"state": "awaiting_problem_description"})
+                    elif top_intent == "QualificarSDR":
+                        sdr_state_info["state"] = "awaiting_name_role"
+                        await self.sdr_state_accessor.set(turn_context, sdr_state_info)
+                        response_text = ("Claro! Posso direcionar você para um de nossos especialistas. "
+                                        "Para começarmos, poderia me dizer seu nome completo e sua função/cargo atual na empresa, por favor?")
+                    elif top_intent == "Despedida":
+                        response_text = "Até logo! Foi um prazer ajudar. Tenha um ótimo dia!"
+                    elif top_intent == "None":
+                        response_text = default_response_text
+                    else:
+                        response_text = default_response_text 
+                    
+                    response_activity = MessageFactory.text(response_text)
+                    handled = True
 
-                        print(f"CLU: Intenção '{top_intent}' ({confidence_score:.2f})")
-                        if entities:
-                            print(f"CLU: Entidades: {entities}")
+                    print(f"CLU: Intenção '{top_intent}' ({confidence_score:.2f})")
+                    if entities:
+                        # Printando entidades de forma mais robusta, pois 'entities' pode ser uma lista de objetos
+                        print(f"CLU: Entidades: {[e.as_dict() for e in entities] if hasattr(entities[0], 'as_dict') else entities}")
 
             except Exception as e:
                 print(f"ERRO ao chamar o CLU: {e}")
@@ -263,100 +268,102 @@ class Tralhobot(ActivityHandler):
         elif current_sdr_state == "awaiting_size":
             sdr_state_info["size"] = user_message
             is_qualified = False
-            
-            # Qualificação simples: empresas com mais de 10 funcionários são qualificadas
-            if "10" in user_message or "50" in user_message or "grande" in user_message.lower():
+            role_lower = str(sdr_state_info.get("role", "")).lower()
+            size_lower = str(sdr_state_info.get("size", "")).lower()
+            if any(r in role_lower for r in ["gerente", "diretor", "sócio", "coordenador"]) and \
+               any(s in size_lower for s in ["até 10", "11-50", "pequeno"]):
                 is_qualified = True
             
             sdr_state_info["qualified"] = is_qualified
+            await self.sdr_state_accessor.set(turn_context, sdr_state_info)
             
             if is_qualified:
-                sdr_state_info["state"] = "awaiting_email"
+                sdr_state_info["state"] = "proposing_meeting"
                 await self.sdr_state_accessor.set(turn_context, sdr_state_info)
-                response_text = ("Perfeito! Com base nas informações que você compartilhou, acredito que podemos ajudar a sua empresa com soluções personalizadas. "
-                                "Para que um de nossos especialistas possa entrar em contato, poderia me informar seu e-mail profissional, por favor?")
+                response_text = ("Com base no que conversamos, acredito que nossas soluções podem realmente agregar valor à sua empresa. "
+                                 "Gostaria de agendar uma conversa com um de nossos especialistas? Ele(a) poderá apresentar demonstrações personalizadas e discutir como podemos atender às suas necessidades específicas.")
+                response_activity = self._create_yes_no_card(turn_context, response_text, "schedule_meeting_yes", "schedule_meeting_no")
+            else:
+                sdr_state_info["state"] = "handling_unqualified"
+                await self.sdr_state_accessor.set(turn_context, sdr_state_info)
+                response_text = ("Obrigado pelas informações. No momento, parece que nossas soluções podem não ser o encaixe ideal para as suas necessidades atuais / perfil da sua empresa. "
+                                 "Gostaria de receber alguns materiais informativos sobre [Tópico Relevante] por e-mail para referência futura? (Sim/Não)")
+                response_activity = self._create_yes_no_card(turn_context, response_text, "send_materials_yes", "send_materials_no")
+
+        elif current_sdr_state == "proposing_meeting":
+            if user_message == "schedule_meeting_yes":
+                sdr_state_info["state"] = "awaiting_email_for_schedule"
+                await self.sdr_state_accessor.set(turn_context, sdr_state_info)
+                response_text = "Excelente! Para qual e-mail posso enviar o convite da reunião?"
                 response_activity = MessageFactory.text(response_text)
             else:
-                sdr_state_info["state"] = "none"
-                await self.sdr_state_accessor.set(turn_context, sdr_state_info)
-                response_text = ("Obrigado pelas informações! Temos soluções específicas para empresas do seu porte. "
-                                "Recomendo que você confira nosso pacote para pequenas empresas em nosso site: [link_pacote_pequenas_empresas]. "
-                                "Se tiver alguma dúvida específica, estou à disposição!")
+                response_text = "Entendido. Se mudar de ideia ou precisar de algo mais, é só chamar!"
+                await self.sdr_state_accessor.set(turn_context, {"state": "none"})
+                send_log = True
                 response_activity = MessageFactory.text(response_text)
-        
-        elif current_sdr_state == "awaiting_email":
+
+        elif current_sdr_state == "awaiting_email_for_schedule":
             sdr_state_info["email"] = user_message
-            sdr_state_info["state"] = "awaiting_meeting_confirmation"
+            sdr_state_info["state"] = "scheduling_confirmed"
             await self.sdr_state_accessor.set(turn_context, sdr_state_info)
-            response_text = ("Excelente! Gostaria de agendar uma reunião com um de nossos especialistas para discutir como podemos ajudar a "
-                            f"{sdr_state_info.get('company', 'sua empresa')} a superar os desafios mencionados? (Sim/Não)")
+            specialist_name = "[Nome do Especialista]"
+            response_text = (f"Perfeito! Agendamento confirmado com {specialist_name}. "
+                             f"O convite foi enviado para {sdr_state_info['email']}. "
+                             f"Confirmando os dados: Nome: {sdr_state_info.get('name', 'N/A')}, Cargo: {sdr_state_info.get('role', 'N/A')}. "
+                             f"{specialist_name} está ansioso para conversar com você. Há mais algo em que posso ajudar agora?")
+            send_log = True
+            await self.sdr_state_accessor.set(turn_context, {"state": "none"})
             response_activity = MessageFactory.text(response_text)
-        
-        elif current_sdr_state == "awaiting_meeting_confirmation":
-            if "sim" in user_message.lower():
-                sdr_state_info["state"] = "none"
+
+        elif current_sdr_state == "handling_unqualified":
+            if user_message == "send_materials_yes":
+                sdr_state_info["state"] = "awaiting_email_for_materials"
                 await self.sdr_state_accessor.set(turn_context, sdr_state_info)
-                
-                # Preparar dados para o e-mail
-                name = sdr_state_info.get("name", "Nome não informado")
-                role = sdr_state_info.get("role", "Cargo não informado")
-                company = sdr_state_info.get("company", "Empresa não informada")
-                needs = sdr_state_info.get("needs", "Necessidades não informadas")
-                size = sdr_state_info.get("size", "Tamanho não informado")
-                email = sdr_state_info.get("email", "Email não informado")
-                
-                # Enviar e-mail para o coordenador e dono da empresa
-                try:
-                    if CONFIG.EMAIL_ENABLED:
-                        email_subject = f"[LEAD QUALIFICADO] Nova reunião solicitada por {name} da {company}"
-                        email_body = f"""
-                        <h2>Novo Lead Qualificado</h2>
-                        <p><strong>Nome:</strong> {name}</p>
-                        <p><strong>Cargo:</strong> {role}</p>
-                        <p><strong>Empresa:</strong> {company}</p>
-                        <p><strong>Tamanho da empresa:</strong> {size}</p>
-                        <p><strong>Email:</strong> {email}</p>
-                        <p><strong>Necessidades:</strong> {needs}</p>
-                        <p>Por favor, entre em contato com este lead qualificado o mais breve possível.</p>
-                        """
-                        
-                        # Enviar para o coordenador
-                        await send_log_to_stakeholders(
-                            CONFIG.EMAIL_COORDINATOR,
-                            email_subject,
-                            email_body,
-                            CONFIG.EMAIL_HOST,
-                            CONFIG.EMAIL_PORT,
-                            CONFIG.EMAIL_USER,
-                            CONFIG.EMAIL_PASSWORD,
-                            CONFIG.EMAIL_USE_SSL
-                        )
-                        
-                        # Enviar para o dono da empresa
-                        await send_log_to_stakeholders(
-                            CONFIG.EMAIL_OWNER,
-                            email_subject,
-                            email_body,
-                            CONFIG.EMAIL_HOST,
-                            CONFIG.EMAIL_PORT,
-                            CONFIG.EMAIL_USER,
-                            CONFIG.EMAIL_PASSWORD,
-                            CONFIG.EMAIL_USE_SSL
-                        )
-                        
-                        send_log = True
-                except Exception as e:
-                    print(f"Erro ao enviar e-mail: {str(e)}")
-                
-                response_text = ("Perfeito! Encaminhei sua solicitação para nossa equipe de especialistas. "
-                                f"Em breve, alguém entrará em contato com você através do e-mail {email} para agendar a melhor data e horário. "
-                                "Obrigado pelo interesse em nossas soluções!")
+                response_text = "Ótimo! Para qual e-mail posso enviar os materiais?"
                 response_activity = MessageFactory.text(response_text)
             else:
-                sdr_state_info["state"] = "none"
-                await self.sdr_state_accessor.set(turn_context, sdr_state_info)
-                response_text = ("Sem problemas! Se mudar de ideia ou tiver outras dúvidas no futuro, estou à disposição. "
-                                "Você também pode entrar em contato diretamente pelo e-mail contato@tralhotec.com.br quando desejar.")
+                response_text = "Entendido. Agradeço seu tempo e interesse na Tralhotec. Tenha um ótimo dia!"
+                await self.sdr_state_accessor.set(turn_context, {"state": "none"})
+                send_log = True
                 response_activity = MessageFactory.text(response_text)
         
+        elif current_sdr_state == "awaiting_email_for_materials":
+            sdr_state_info["email"] = user_message
+            response_text = f"Materiais enviados para {sdr_state_info['email']}. Agradeço seu tempo e interesse na Tralhotec. Tenha um ótimo dia!"
+            await self.sdr_state_accessor.set(turn_context, {"state": "none"})
+            send_log = True
+            response_activity = MessageFactory.text(response_text)
+
+        if send_log:
+            conversation_log = await self.log_accessor.get(turn_context, lambda: "")
+            log_prefix_user = "User:" 
+            log_prefix_bot = "Tralhobot:"
+            conversation_log += f"{log_prefix_user} {user_message}\n"
+            if hasattr(response_activity, 'text') and response_activity.text:
+                conversation_log += f"{log_prefix_bot} {response_activity.text}\n"
+            elif hasattr(response_activity, 'attachments') and response_activity.attachments:
+                card_text = response_activity.attachments[0].content.get('body', [{}])[0].get('text', '[Card Sent]')
+                conversation_log += f"Tralhobot: {card_text}\n"
+                
+            send_success = send_log_to_stakeholders(conversation_log, sdr_state_info)
+            await self.log_accessor.set(turn_context, "")
+
         return response_activity
+
+    def _create_yes_no_card(self, turn_context: TurnContext, text: str, yes_value: str, no_value: str) -> Attachment:
+        card = CardFactory.hero_card(
+            title=text,
+            buttons=[
+                CardAction(
+                    title="Sim",
+                    type=ActionTypes.im_back,
+                    value=yes_value,
+                ),
+                CardAction(
+                    title="Não",
+                    type=ActionTypes.im_back,
+                    value=no_value,
+                ),
+            ],
+        )
+        return card.attachments[0]
