@@ -338,9 +338,9 @@ class Tralhobot(ActivityHandler):
         return handled # Retorna se o fluxo foi tratado e a resposta enviada
 
 
-def _create_yes_no_card(self, text: str, yes_value: str, no_value: str) -> Attachment:
-    # DEVE ESTAR ASSIM:
-    return CardFactory.hero_card(
+    def _create_yes_no_card(self, text: str, yes_value: str, no_value: str) -> Attachment:
+        # ...
+        return CardFactory.hero_card(
         title=text, # <--- VERIFIQUE SE ESTÁ 'title' AQUI
         buttons=[
             CardAction(title="Sim", type=ActionTypes.im_back, value=yes_value),
