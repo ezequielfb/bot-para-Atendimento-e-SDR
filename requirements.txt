@@ -1,7 +1,7 @@
 Flask
 gunicorn
 aiohttp
-botbuilder-core
+botbuilder-core==4.17.0
 botbuilder-schema
 asyncio
 azure-ai-language-conversations==1.0.0
