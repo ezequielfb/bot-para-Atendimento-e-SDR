@@ -13,7 +13,6 @@ from botbuilder.core import (
 from botbuilder.schema import ChannelAccount, ActivityTypes, Attachment, ActionTypes, CardAction
 
 from config import DefaultConfig
-from email_utils import send_log_to_stakeholders
 
 # Importações do Azure AI Language
 from azure.ai.language.conversations import ConversationAnalysisClient
@@ -281,16 +280,14 @@ class Tralhobot(ActivityHandler):
             
             if is_qualified:
                 state["state"] = "proposing_meeting"
-                # === ALTERAÇÃO AQUI: 'text' foi mudado para 'title' ===
-                response_activity_to_send = self._create_yes_no_card(
+                response_activity_to_send = self._create_yes_no_card( #
                     text="Com base no que conversamos, acredito que nossas soluções podem realmente agregar valor à sua empresa. "
                     "Gostaria de agendar uma conversa com um de nossos especialistas? Ele(a) poderá apresentar demonstrações personalizadas e discutir como podemos atender às suas necessidades específicas.",
                     yes_value="schedule_meeting_yes", no_value="schedule_meeting_no"
                 )
             else:
                 state["state"] = "handling_unqualified"
-                # === ALTERAÇÃO AQUI: 'text' foi mudado para 'title' ===
-                response_activity_to_send = self._create_yes_no_card(
+                response_activity_to_send = self._create_yes_no_card( #
                     text="Obrigado pelas informações. No momento, parece que nossas soluções podem não ser o encaixe ideal para as suas necessidades atuais / perfil da sua empresa. "
                     "Gostaria de receber alguns materiais informativos sobre [Tópico Relevante] por e-mail para referência futura? (Sim/Não)",
                     yes_value="send_materials_yes", no_value="send_materials_no"
@@ -339,11 +336,10 @@ class Tralhobot(ActivityHandler):
 
 
     def _create_yes_no_card(self, text: str, yes_value: str, no_value: str) -> Attachment:
-        # ...
         return CardFactory.hero_card(
-        text=text,
-        buttons=[
-            CardAction(title="Sim", type=ActionTypes.im_back, value=yes_value),
-            CardAction(title="Não", type=ActionTypes.im_back, value=no_value),
-        ],
-    ).attachments[0]
+            title=text, # Alterado para 'title' conforme a documentação de HeroCard
+            buttons=[
+                CardAction(title="Sim", type=ActionTypes.im_back, value=yes_value),
+                CardAction(title="Não", type=ActionTypes.im_back, value=no_value),
+            ],
+        ).attachments[0]
