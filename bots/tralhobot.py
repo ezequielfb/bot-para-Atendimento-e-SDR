@@ -341,7 +341,7 @@ class Tralhobot(ActivityHandler):
     def _create_yes_no_card(self, text: str, yes_value: str, no_value: str) -> Attachment:
         # ...
         return CardFactory.hero_card(
-        title=text, # <--- VERIFIQUE SE ESTÁ 'title' AQUI
+        text=text,
         buttons=[
             CardAction(title="Sim", type=ActionTypes.im_back, value=yes_value),
             CardAction(title="Não", type=ActionTypes.im_back, value=no_value),
